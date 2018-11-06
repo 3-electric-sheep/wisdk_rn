@@ -1,0 +1,27 @@
+
+{
+  "name": "react-native-wisdk",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "react-native"
+  ],
+  "author": "",
+  "license": "",
+  "peerDependencies": {
+    "react": ">= 16.5.0",
+    "react-native": ">= 0.57.0"
+  },
+  "dependencies": {
+    "react-native-device-info": "^0.24.3",
+    "react-native-firebase": "^5.1.0",
+    "react-native-open-settings": "^1.0.1",
+    "react-native-permissions": "^1.1.1",
+    "uuid": "^3.2.1"
+  }
+
+}
