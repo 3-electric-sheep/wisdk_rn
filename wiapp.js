@@ -256,6 +256,18 @@ export class Wiapp {
     }
 
     /**
+     * setup the test / prod environement.
+     *
+     * this should be called prior to calling start.
+     *
+     * @param testmode = true run test / false run prod
+     */
+    setTestEnvironment = (testMode) => {
+       this.config.environment = (testMode) ? WiConfig.ENV_TEST : WiConfig.ENV_PROD;
+       this.api.setEndpoint(this.config.getEnvServer());
+    };
+
+    /**
      * Start up sequence for WI.
      *
      * Note: while there are lots aync ops here we do them serially as there is not
@@ -450,7 +462,7 @@ export class Wiapp {
         }
 
         if (!params.provider_id){
-            params.provider_id = this.config.providerKey;
+            params.provider_id = this.config.getEnvProvider();
         }
 
         const path = (haveUser) ? TES_PATH_LOGIN : TES_PATH_REGISTER;

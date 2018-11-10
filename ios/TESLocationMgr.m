@@ -205,7 +205,7 @@
 
         // Stop the significant location change service, if available,
         // and start the standard location service.
-        if (self.observer_fg) {
+        if (self.observer_fg == nil) {
             self.observer_fg = [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationWillEnterForegroundNotification object:nil queue:nil usingBlock:^(NSNotification *_Nonnull note) {
                 if (self.config.useForegroundMonitoring) {
                     // Stop significant location updates and start normal location updates again since the app is in the forefront.

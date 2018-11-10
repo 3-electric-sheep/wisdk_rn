@@ -47,12 +47,12 @@ export class Wiapi {
     }
 
     getEndpoint = () => {
-        return this.mEndpoint;
+        return this.endpoint;
     };
 
     setEndpoint = (endpoint) => {
-        this.mEndpoint = endpoint;
-    };
+        this.endpoint = endpoint;
+    }
 
     /**
      returns whether the user has an authorziation token or not

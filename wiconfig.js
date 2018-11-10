@@ -69,15 +69,15 @@ export class WiConfig  {
     static get ENV_PROD() { return "prod" }
     static get ENV_TEST() { return "test" }
 
-    // TODO: fix profile names
     static get PROD_SERVER() { return "https://api.3-electric-sheep.com" }
-    static get PROD_PUSH_PROFILE() { return "snapitup_prod" }
+    static get PROD_PUSH_PROFILE() { return "<PROD_PROFILE>" }
 
     static get TEST_SERVER() { return "https://testapi.3-electric-sheep.com" }
-    static get TEST_PUSH_PROFILE() { return "snapitup_dev" }
+    static get TEST_PUSH_PROFILE() { return "<TEST_PROFILE>" }
 
     static get WALLET_GOOGLE_OFFER_CLASS() { return "wi_offer_class" }
     static get WALLET_APPLE_OFFER_CLASS() { return "wi_offer_pass"}
+
     static get WALLET_PROFILE() { return "email" }
     static get MAIL_PROFILE() { return "email" }
     static get SMS_PROFILE() { return "phone" }
@@ -87,6 +87,8 @@ export class WiConfig  {
     static get DISK_CACHE_SIZE() { return 20971520 } // 20 * 1024 * 1024;
 
     static get DEVICE_TYPE_GCM() { return "gcm" }
+    static get DEVICE_TYPE_FCM() { return "gcm" } // just to allow backward compatibility
+
     static get DEVICE_TYPE_MAIL() { return "mail" }
     static get DEVICE_TYPE_SMS() { return "sms" }
     static get DEVICE_TYPE_GOGGLE_WALLET() { return "ap" }
@@ -150,17 +152,22 @@ export class WiConfig  {
     // geofence initial radius
     static get GEOFENCE_RADIUS() { return 20 } // 20 meters
 
-    constructor(providerKey) {
+    constructor(providerKey, testProviderKey) {
         // system config
-        this.providerKey = providerKey;
         this.environment = WiConfig.ENV_PROD;
+
+        this.providerKey = providerKey;
         this.server = WiConfig.PROD_SERVER;
         this.pushProfile = WiConfig.PROD_PUSH_PROFILE;
+
+        this.testProviderKey = testProviderKey;
         this.testServer = WiConfig.TEST_SERVER;
         this.testPushProfile = WiConfig.TEST_PUSH_PROFILE;
+
         this.walletProfile = WiConfig.WALLET_PROFILE;
         this.walletOfferClass =  (Platform.OS === "ios") ? WiConfig.WALLET_APPLE_OFFER_CLASS : WiConfig.WALLET_GOOGLE_OFFER_CLASS;
         this.walletType = (Platform.OS === "ios") ? WiConfig.DEVICE_TYPE_APPLE_WALLET : WiConfig.DEVICE_TYPE_GOGGLE_WALLET;
+
         this.memCacheSize = WiConfig.MEM_CACHE_SIZE;
         this.diskCacheSize = WiConfig.DISK_CACHE_SIZE;
         this.debug = false;
@@ -174,11 +181,14 @@ export class WiConfig  {
         this.logLocInfo = false;
 
         // auth config
-        this.authAutoAuthenticate = false;
-        this.authCredentials = null;
+        this.authAutoAuthenticate = true;
+        this.authCredentials = {
+            anonymous_user: true
+        };
 
         //device config
-        this.deviceTypes = (Platform.OS === "ios") ? WiConfig.deviceTypeAPN : WiConfig.deviceTypeGCM;
+        this.deviceTypes = WiConfig.deviceTypeGCM;  // both IOS and Android go through firebase in RN
+        //this.deviceTypes = (Platform.OS === "ios") ? WiConfig.deviceTypeAPN : WiConfig.deviceTypeGCM;
 
         // Job details
         this.delay  = WiConfig.JOB_DEFAULT_DELAY;
@@ -215,6 +225,10 @@ export class WiConfig  {
 
     getEnvPushProfile(){
         return (this.environment === WiConfig.ENV_PROD) ? this.pushProfile : this.testPushProfile;
+    }
+
+    getEnvProvider() {
+        return (this.environment === WiConfig.ENV_PROD) ? this.providerKey : this.testProviderKey;
     }
 
     saveConfig(){
