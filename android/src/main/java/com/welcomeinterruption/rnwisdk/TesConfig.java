@@ -42,10 +42,10 @@ public class TesConfig implements Parcelable, Cloneable {
     public static final String ENV_TEST = "test";
 
     public static final String PROD_SERVER = "https://api.3-electric-sheep.com";
-    public static final String PROD_PUSH_PROFILE = "snapitup_prod";
+    public static final String PROD_PUSH_PROFILE = "<PROD_PROFILE>";
 
-    public static final String TEST_SERVER = "http://testapi.3-electric-sheep.com";
-    public static final String TEST_PUSH_PROFILE = "snapitup_dev";
+    public static final String TEST_SERVER = "https://testapi.3-electric-sheep.com";
+    public static final String TEST_PUSH_PROFILE = "<TEST_PROFILE>";
 
     public static final String WALLET_OFFER_CLASS = "wi_offer_class";
     public static final String WALLET_PROFILE = "email";

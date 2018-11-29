@@ -22,10 +22,10 @@
 #define ENV_TEST @"test"
 
 #define PROD_SERVER @"https://api.3-electric-sheep.com"
-#define PROD_PUSH_PROFILE @"snapitup_prod"
+#define PROD_PUSH_PROFILE @"<PROD_PROFILE>"
 
-#define TEST_SERVER @"http://test.3-electric-sheep.com"
-#define TEST_PUSH_PROFILE @"snapitup_dev"
+#define TEST_SERVER @"https://testapi.3-electric-sheep.com"
+#define TEST_PUSH_PROFILE @"<TEST_PROFILE>"
 
 #define WALLET_OFFER_CLASS @"wi_offer_pass"
 #define WALLET_PROFILE @"email"
