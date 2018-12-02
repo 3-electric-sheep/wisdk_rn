@@ -20,20 +20,29 @@
  */
 package com.welcomeinterruption.rnwisdk;
 
+import android.content.Context;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.util.Log;
 
 import com.facebook.react.jstasks.HeadlessJsTaskConfig;
-import com.firebase.jobdispatcher.JobParameters;
+
+import androidx.work.Data;
+import androidx.work.WorkerParameters;
 
 
 public class RNWiBootService extends HeadlessJsJobService
 {
     private static final String TAG = "RNWiBootService";
 
+    public RNWiBootService(
+            @NonNull Context context,
+            @NonNull WorkerParameters params) {
+        super(context, params);
+    }
     @Override
     @Nullable
-    protected HeadlessJsTaskConfig getTaskConfig(JobParameters params)
+    protected HeadlessJsTaskConfig getTaskConfig(Data extras)
     {
         Log.d(TAG, "Boot receiver fired");
         return new HeadlessJsTaskConfig(RNWisdkModule.BOOT_TASK_NAME, null, 0, true);

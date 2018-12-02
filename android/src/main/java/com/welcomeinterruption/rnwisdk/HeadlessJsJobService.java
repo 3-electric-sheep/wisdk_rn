@@ -18,6 +18,7 @@ package com.welcomeinterruption.rnwisdk;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.os.PowerManager;
+import android.support.annotation.NonNull;
 
 import com.facebook.infer.annotation.Assertions;
 import com.facebook.react.ReactApplication;
@@ -28,15 +29,19 @@ import com.facebook.react.bridge.UiThreadUtil;
 import com.facebook.react.jstasks.HeadlessJsTaskConfig;
 import com.facebook.react.jstasks.HeadlessJsTaskContext;
 import com.facebook.react.jstasks.HeadlessJsTaskEventListener;
+import com.google.common.util.concurrent.ListenableFuture;
 
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 import javax.annotation.Nullable;
+import android.support.annotation.NonNull;
 
+import androidx.work.Data;
+import androidx.work.Worker;
+import androidx.work.WorkerParameters;
+import androidx.work.impl.utils.futures.SettableFuture;
 
-import com.firebase.jobdispatcher.JobService;
-import com.firebase.jobdispatcher.JobParameters;
 
 /**
  * Base class for running JS without a UI. Generally, you only need to override
@@ -51,37 +56,37 @@ import com.firebase.jobdispatcher.JobParameters;
  * {@link BroadcastReceiver#onReceive}, to make sure the device doesn't go to sleep before the
  * service is started.
  */
-public abstract class HeadlessJsJobService extends JobService implements HeadlessJsTaskEventListener {
+public abstract class HeadlessJsJobService extends Worker implements HeadlessJsTaskEventListener {
 
     private final Set<Integer> mActiveTasks = new CopyOnWriteArraySet<>();
-    private static @Nullable
-    PowerManager.WakeLock sWakeLock;
 
+    public HeadlessJsJobService(
+            @NonNull Context context,
+            @NonNull WorkerParameters params) {
+        super(context, params);
+    }
+
+    @NonNull
     @Override
-    public boolean onStartJob(JobParameters job) {
-        HeadlessJsTaskConfig taskConfig = getTaskConfig(job);
+    public Worker.Result doWork() {
+        Data job = this.getInputData();
+        final HeadlessJsTaskConfig taskConfig = getTaskConfig(job);
         if (taskConfig != null) {
-            startTask(taskConfig);
+            UiThreadUtil.runOnUiThread(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        startTask(taskConfig);
+                        finishtask();
+                    }
+                }
+            );
+            return Result.SUCCESS;
         }
-        return false; // Answers the question: "Is there still work going on?"
+
+        return Result.FAILURE;
     }
 
-    @Override
-    public boolean onStopJob(JobParameters job) {
-        if (getReactNativeHost().hasInstance()) {
-            ReactInstanceManager reactInstanceManager = getReactNativeHost().getReactInstanceManager();
-            ReactContext reactContext = reactInstanceManager.getCurrentReactContext();
-            if (reactContext != null) {
-                HeadlessJsTaskContext headlessJsTaskContext =
-                        HeadlessJsTaskContext.getInstance(reactContext);
-                headlessJsTaskContext.removeTaskEventListener(this);
-            }
-        }
-        if (sWakeLock != null) {
-            sWakeLock.release();
-        }
-        return false; // Answers the question: "Should this job be retried?"
-    }
 
     /**
      * Called from {@link #onStartCommand} to create a {@link HeadlessJsTaskConfig} for this intent.
@@ -89,23 +94,8 @@ public abstract class HeadlessJsJobService extends JobService implements Headles
      * @return a {@link HeadlessJsTaskConfig} to be used with {@link #startTask}, or
      *         {@code null} to ignore this command.
      */
-    protected @Nullable HeadlessJsTaskConfig getTaskConfig(JobParameters job) {
+    protected @Nullable HeadlessJsTaskConfig getTaskConfig(Data job) {
         return null;
-    }
-
-    /**
-     * Acquire a wake lock to ensure the device doesn't go to sleep while processing background tasks.
-     */
-    public static void acquireWakeLockNow(Context context) {
-        if (sWakeLock == null || !sWakeLock.isHeld()) {
-            PowerManager powerManager =
-                    Assertions.assertNotNull((PowerManager) context.getSystemService(POWER_SERVICE));
-            sWakeLock = powerManager.newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK,
-                    com.facebook.react.HeadlessJsTaskService.class.getSimpleName());
-            sWakeLock.setReferenceCounted(false);
-            sWakeLock.acquire();
-        }
     }
 
     /**
@@ -117,9 +107,7 @@ public abstract class HeadlessJsJobService extends JobService implements Headles
      */
     protected void startTask(final HeadlessJsTaskConfig taskConfig) {
         UiThreadUtil.assertOnUiThread();
-        acquireWakeLockNow(this);
-        final ReactInstanceManager reactInstanceManager =
-                getReactNativeHost().getReactInstanceManager();
+        final ReactInstanceManager reactInstanceManager = getReactNativeHost().getReactInstanceManager();
         ReactContext reactContext = reactInstanceManager.getCurrentReactContext();
         if (reactContext == null) {
             reactInstanceManager
@@ -141,16 +129,20 @@ public abstract class HeadlessJsJobService extends JobService implements Headles
     private void invokeStartTask(ReactContext reactContext, final HeadlessJsTaskConfig taskConfig) {
         final HeadlessJsTaskContext headlessJsTaskContext = HeadlessJsTaskContext.getInstance(reactContext);
         headlessJsTaskContext.addTaskEventListener(this);
+        int taskId = headlessJsTaskContext.startTask(taskConfig);
+        mActiveTasks.add(taskId);
+    }
 
-        UiThreadUtil.runOnUiThread(
-                new Runnable() {
-                    @Override
-                    public void run() {
-                        int taskId = headlessJsTaskContext.startTask(taskConfig);
-                        mActiveTasks.add(taskId);
-                    }
-                }
-        );
+
+    private void finishtask() {
+        if (getReactNativeHost().hasInstance()) {
+            ReactInstanceManager reactInstanceManager = getReactNativeHost().getReactInstanceManager();
+            ReactContext reactContext = reactInstanceManager.getCurrentReactContext();
+            if (reactContext != null) {
+                HeadlessJsTaskContext headlessJsTaskContext = HeadlessJsTaskContext.getInstance(reactContext);
+                headlessJsTaskContext.removeTaskEventListener(this);
+            }
+        }
     }
 
     @Override
@@ -159,9 +151,6 @@ public abstract class HeadlessJsJobService extends JobService implements Headles
     @Override
     public void onHeadlessJsTaskFinish(int taskId) {
         mActiveTasks.remove(taskId);
-        if (mActiveTasks.size() == 0) {
-            stopSelf();
-        }
     }
 
     /**
@@ -172,6 +161,6 @@ public abstract class HeadlessJsJobService extends JobService implements Headles
      * storing a {@code ReactNativeHost}, e.g. as a static field somewhere.
      */
     protected ReactNativeHost getReactNativeHost() {
-        return ((ReactApplication) getApplication()).getReactNativeHost();
+        return ((ReactApplication) this.getApplicationContext()).getReactNativeHost();
     }
 }

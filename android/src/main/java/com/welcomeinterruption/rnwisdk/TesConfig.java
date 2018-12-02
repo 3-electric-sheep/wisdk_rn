@@ -28,7 +28,7 @@ import com.google.android.gms.location.LocationRequest;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import com.firebase.jobdispatcher.Constraint;
+import androidx.work.NetworkType;
 
 /**
  * Created by pfrantz on 11/08/2017.
@@ -65,7 +65,7 @@ public class TesConfig implements Parcelable, Cloneable {
     private static final boolean JOB_DEFAULT_REQUIRE_CHARGING = false;
     private static final int JOB_DEFAULT_DELAY = 0;
     private static final int JOB_DEFAULT_DEADLINE = 5 * 60; /* 5 min */
-    private static final int JOB_DEFAULT_NETWORK_TYPE = Constraint.ON_ANY_NETWORK;
+    private static final int JOB_DEFAULT_NETWORK_TYPE = NetworkType.CONNECTED.ordinal();
     private static final boolean JOB_DEFAULT_REQUIRE_IDLE = false ;
 
     // device push types

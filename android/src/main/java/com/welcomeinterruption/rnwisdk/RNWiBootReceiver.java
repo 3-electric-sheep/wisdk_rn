@@ -18,17 +18,10 @@ package com.welcomeinterruption.rnwisdk;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.util.Log;
 
-import com.facebook.react.HeadlessJsTaskService;
-import com.google.android.gms.location.Geofence;
-import com.google.android.gms.location.GeofencingEvent;
-
-import org.json.JSONException;
-
-import java.util.ArrayList;
-
+import androidx.work.WorkerParameters;
 
 /**
  * On Android geofences are cleared after a device restart, so we tell the sdk we have been rebooted
@@ -36,26 +29,15 @@ import java.util.ArrayList;
 public class RNWiBootReceiver extends BroadcastReceiver
 {
 	private static final String TAG = "RNWiBootReceiver";
+
+
 	@Override
 	public void onReceive(Context context, Intent intent)
 	{
 		Log.e(TAG, "In boot receiver");
 		if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
-			TesJobDispatcher jm = new TesJobDispatcher(context);
-			TesConfig cfg = new TesConfig();
-			try {
-				cfg = TesConfig.getSavedConfig(context);
-			} catch (JSONException e) {
-				Log.e(TAG, "Failed to get saved configs - using defaults. invalid JSON found");
-				e.printStackTrace();
-			}
-
-			jm.scheduleJob(RNWiBootService.class,
-					cfg.delay,
-					cfg.deadline,
-					cfg.networkType,
-					cfg.requireIdle,
-					cfg.requireCharging, null);
+			TesJobDispatcher jm = new TesJobDispatcher();
+			jm.scheduleJob(RNWiBootService.class, null);
 		}
 
 	}

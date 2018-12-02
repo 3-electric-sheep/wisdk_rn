@@ -262,9 +262,10 @@ export class Wiapp {
      *
      * @param testmode = true run test / false run prod
      */
-    setTestEnvironment = (testMode) => {
+    setTestEnvironment = async (testMode) => {
        this.config.environment = (testMode) ? WiConfig.ENV_TEST : WiConfig.ENV_PROD;
        this.api.setEndpoint(this.config.getEnvServer());
+       await this.config.saveConfig();
     };
 
     /**
@@ -582,7 +583,7 @@ export class Wiapp {
             model: DeviceInfo.getModel(),
             brand: (Platform.OS === "android") ? DeviceInfo.getBrand() : DeviceInfo.getDeviceId(),
             sdk: DeviceInfo.getAPILevel(),
-            release: DeviceInfo.getBuildNumber()+"",
+            release: DeviceInfo.getSystemVersion()+"",
             build_type:  (__DEV__)? "debug":"release",
             location_permission: this.locPermission,
             location_type: this.locType
@@ -855,10 +856,6 @@ export class Wiapp {
         });
 
     };
-
-    _initFromTokens = (tokens) => {
-
-    }
 
     saveTokens =  () => {
         const tokens = {

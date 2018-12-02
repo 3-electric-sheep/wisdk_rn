@@ -18,22 +18,11 @@ package com.welcomeinterruption.rnwisdk;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.location.Location;
-import android.os.Bundle;
-import android.os.Parcel;
-import android.util.Log;
 
-import com.facebook.react.HeadlessJsTaskService;
-import com.google.android.gms.location.Geofence;
-import com.google.android.gms.location.GeofencingEvent;
 import com.google.android.gms.location.LocationResult;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
+import androidx.work.Data;
 
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Receiver for handling location updates.
@@ -61,7 +50,7 @@ public class RNLocationUpdatesBroadcastReceiver extends BroadcastReceiver {
             if (ACTION_PROCESS_UPDATES.equals(action) && LocationResult.hasResult(intent)) {
                 LocationResult result = LocationResult.extractResult(intent);
 
-                Bundle b;
+                Data b;
                 if (result == null) {
                     b = TesJobDispatcher.setError("No location received", -1);
                 }
@@ -69,21 +58,8 @@ public class RNLocationUpdatesBroadcastReceiver extends BroadcastReceiver {
                     b = TesJobDispatcher.setData(result);
                 }
 
-                TesJobDispatcher jm = new TesJobDispatcher(context);
-                TesConfig cfg = new TesConfig();
-                try {
-                    cfg = TesConfig.getSavedConfig(context);
-                } catch (JSONException e) {
-                    Log.e(TAG, "Failed to get saved configs - using defaults. invalid JSON found");
-                    e.printStackTrace();
-                }
-
-                jm.scheduleJob(RNLocationUpdateService.class,
-                        cfg.delay,
-                        cfg.deadline,
-                        cfg.networkType,
-                        cfg.requireIdle,
-                        cfg.requireCharging, b);
+                TesJobDispatcher jm = new TesJobDispatcher();
+                jm.scheduleJob(RNLocationUpdateService.class, b);
 
             }
         }

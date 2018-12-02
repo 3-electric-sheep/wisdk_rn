@@ -18,17 +18,10 @@ package com.welcomeinterruption.rnwisdk;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Bundle;
-import android.util.Log;
 
-import com.facebook.react.bridge.Arguments;
-import com.facebook.react.bridge.WritableArray;
-import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofencingEvent;
 
-import org.json.JSONException;
-
-import java.util.ArrayList;
+import androidx.work.Data;
 
 /**
  * Receiver for geofence transition changes.
@@ -53,7 +46,7 @@ public class RNGeoTransitionBroadcastReceiver extends BroadcastReceiver {
      */
     @Override
     public void onReceive(Context context, Intent intent) {
-        Bundle b;
+        Data b;
 
         if (intent.getExtras() != null) {
             GeofencingEvent geofencingEvent = GeofencingEvent.fromIntent(intent);
@@ -64,21 +57,8 @@ public class RNGeoTransitionBroadcastReceiver extends BroadcastReceiver {
                 b = TesJobDispatcher.setData(geofencingEvent);
             }
 
-            TesJobDispatcher jm = new TesJobDispatcher(context);
-            TesConfig cfg = new TesConfig();
-            try {
-                cfg = TesConfig.getSavedConfig(context);
-            } catch (JSONException e) {
-                Log.e(TAG, "Failed to get saved configs - using defaults. invalid JSON found");
-                e.printStackTrace();
-            }
-
-            jm.scheduleJob(RNGeoTransitionService.class,
-                    cfg.delay,
-                    cfg.deadline,
-                    cfg.networkType,
-                    cfg.requireIdle,
-                    cfg.requireCharging, b);
+            TesJobDispatcher jm = new TesJobDispatcher();
+            jm.scheduleJob(RNGeoTransitionService.class, b);
         }
     }
 }

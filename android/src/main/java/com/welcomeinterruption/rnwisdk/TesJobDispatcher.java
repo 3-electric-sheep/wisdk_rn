@@ -15,22 +15,11 @@
 
 package com.welcomeinterruption.rnwisdk;
 
-import android.content.Context;
 import android.location.Location;
-import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.util.Log;
 
-import com.firebase.jobdispatcher.Constraint;
-import com.firebase.jobdispatcher.FirebaseJobDispatcher;
-import com.firebase.jobdispatcher.GooglePlayDriver;
-import com.firebase.jobdispatcher.Job;
-import com.firebase.jobdispatcher.JobService;
 
-import com.firebase.jobdispatcher.Lifetime;
-import com.firebase.jobdispatcher.RetryStrategy;
-import com.firebase.jobdispatcher.Trigger;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofencingEvent;
 import com.google.android.gms.location.LocationResult;
@@ -39,8 +28,14 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
 import java.util.List;
+
+import androidx.work.Constraints;
+import androidx.work.Data;
+import androidx.work.NetworkType;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkManager;
+import androidx.work.Worker;
 
 
 /**
@@ -68,8 +63,6 @@ public class TesJobDispatcher {
 
     private static final String TAG = "TesJobDispatcher";
 
-    private FirebaseJobDispatcher dispatcher = null;
-
     private static int mJobId = 0;
 
     private static synchronized int nextJobId() {
@@ -77,8 +70,7 @@ public class TesJobDispatcher {
     }
 
 
-    public TesJobDispatcher(Context context) {
-        this.dispatcher  = new FirebaseJobDispatcher(new GooglePlayDriver(context));
+    public TesJobDispatcher() {
     }
 
     /**
@@ -87,12 +79,12 @@ public class TesJobDispatcher {
      * @param code - error code
      * @return bundle
      */
-    public static Bundle setError(String msg, int code){
-        Bundle b = new Bundle();
+    public static Data setError(String msg, int code){
+        Data.Builder b = new Data.Builder();
         b.putInt(TES_JOBPARAM_SUCCESS, 0);
         b.putString(TES_JOBPARAM_MSG, msg);
         b.putInt(TES_JOBPARAM_CODE, code);
-        return b;
+        return b.build();
     }
 
     /**
@@ -103,8 +95,8 @@ public class TesJobDispatcher {
      * @param lr - location result
      * @return bunder
      */
-    public static Bundle setData(LocationResult lr) {
-        Bundle b = new Bundle();
+    public static Data setData(LocationResult lr) {
+        Data.Builder b = new Data.Builder();
         try {
             List<Location> locations = lr.getLocations();
 
@@ -122,7 +114,7 @@ public class TesJobDispatcher {
         catch (JSONException e){
             setError("Faled to encode location to JSON "+e.getMessage(), -3);
         }
-        return b;
+        return b.build();
     }
 
     /**
@@ -133,8 +125,8 @@ public class TesJobDispatcher {
      * @param ge - geofence envent
      * @return bunder
      */
-    public static Bundle setData(GeofencingEvent ge) {
-        Bundle b = new Bundle();
+    public static Data setData(GeofencingEvent ge) {
+        Data.Builder b = new Data.Builder();
         try {
 
             JSONObject params = new JSONObject();
@@ -156,7 +148,7 @@ public class TesJobDispatcher {
         catch (JSONException e){
             setError("Faled to encode geoevtn to JSON "+e.getMessage(), -3);
         }
-        return b;
+        return b.build();
     }
 
     /**
@@ -164,7 +156,7 @@ public class TesJobDispatcher {
      * @param b - bundle containting jsonified geoevent or location result
      * @return JSON obbject
      */
-    public static JSONObject getJsonData(Bundle b) throws JSONException {
+    public static JSONObject getJsonData(Data b) throws JSONException {
         String json = b.getString(TES_JOBPARAM_DATA);
         return new JSONObject(json);
     }
@@ -175,75 +167,39 @@ public class TesJobDispatcher {
      * @param b - bunle to check
      * @return success - true
      */
-    public static boolean isSuccess(Bundle b){
-        return (b.getInt(TES_JOBPARAM_SUCCESS) == 1);
+    public static boolean isSuccess(Data b){
+        return (b.getInt(TES_JOBPARAM_SUCCESS, 0) == 1);
     }
 
-    public static int getErrorCode(Bundle b){
-        return b.getInt(TES_JOBPARAM_CODE);
+    public static int getErrorCode(Data b){
+        return b.getInt(TES_JOBPARAM_CODE, 0);
     }
 
-    public static String getErrorMessage(Bundle b){
+    public static String getErrorMessage(Data b){
         return b.getString(TES_JOBPARAM_MSG);
     }
 
     /**
      * Schedule a job
      * @param cls - class of job
-     * @param delay - wait before job
-     * @param deadline - how long can we wait
-     * @param networkType - netword restrictions
-     * @param requireIdle - require idle
-     * @param requireCharging - require charging
      * @param extras - bundle to pass to the job
      */
-    public void scheduleJob(@NonNull Class<? extends JobService> cls, final int delay, final int deadline, final int networkType, final boolean requireIdle, boolean requireCharging,  final @Nullable Bundle extras){
-        int jobId = nextJobId();
-        String jobTag = String.format("JID_%d", jobId);
+    public void scheduleJob(@NonNull Class<? extends Worker> cls, final @Nullable Data extras){
 
-        Job.Builder builder =dispatcher.newJobBuilder()
-                .setService(cls) // the JobService that will be called
-                .setTag(jobTag)  // uniquely identifies the job
-                .setRecurring(false) // one-off job
-                .setLifetime(Lifetime.FOREVER)//persist forever
-                .setTrigger(Trigger.executionWindow(delay, deadline))  // delay and deadline
-                .setReplaceCurrent(false) // don't overwrite an existing job with the same tag
-                .setRetryStrategy(RetryStrategy.DEFAULT_EXPONENTIAL); //retry with exponential backoff
+        Constraints myConstraints = new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build();
 
+        OneTimeWorkRequest.Builder builder =
+                new OneTimeWorkRequest.Builder(cls).setConstraints(myConstraints);
 
-        int idx = 0;
-        int size = 1 + ((requireIdle)?1:0) + ((requireCharging)?1:0);
-        int[] constraints = new int[size];
+        if (extras!=null) {
+            builder.setInputData(extras);
+        }
 
-        constraints[idx++] = networkType;
-        if (requireIdle)
-            constraints[idx++]=Constraint.DEVICE_IDLE;
-        if (requireCharging)
-            constraints[idx++]=Constraint.DEVICE_CHARGING;
-
-        builder.setConstraints(constraints);
-
-        if (extras!=null)
-            builder.setExtras(extras);
-
-        Job myJob = builder.build();
-        dispatcher.mustSchedule(myJob);
+        OneTimeWorkRequest myJob = builder.build();
+        WorkManager.getInstance().enqueue(myJob);
     }
 
-    /**
-     * Cancels the given job
-     * @param jobId - job tag to cancel
-     */
-    public void cancel(final String jobId)
-    {
-        dispatcher.cancel(jobId);
-    }
-
-    /**
-     * cancel all jobs.
-     */
-    public void cancelAllJobs() {
-        dispatcher.cancelAll();
-    }
 
 }
