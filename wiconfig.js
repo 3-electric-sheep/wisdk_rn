@@ -55,7 +55,8 @@ const INITIAL_TRIGGER_ENTER = 1;
 const INITIAL_TRIGGER_EXIT = 2;
 const INITIAL_TRIGGER_DWELL = 4;
 
-const  ONE_MINUTE = 60000; // 1 minure in usec
+const ONE_MINUTE = 60000; // 1 minure in usec
+const NAG_INTERVAL = 60*60*24*7; // 7 days
 
 /** end Android constants **/
 
@@ -213,6 +214,7 @@ export class WiConfig  {
         // permissions
         this.askForLocationPermission = true;
         this.askForNotificationPermission = true;
+        this.locationPermissionNagInterval = NAG_INTERVAL;
 
         // notifications
         this.autoDisplayNotifications = true;
@@ -252,6 +254,7 @@ export class WiConfig  {
                         this[key] = jsonData[key];
                 }
             }
+            return this;
        });
     }
 }

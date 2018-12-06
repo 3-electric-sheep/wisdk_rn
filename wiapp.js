@@ -212,6 +212,8 @@ export class Wiapp {
         this.localeToken = null;
         this.timezoneToken = null;
         this.versionToken = null;
+        this.lastPermissionNag = null;
+        this.lastPermissionNagCount = 0;
 
         this.lastLoc = null;
 
@@ -278,7 +280,10 @@ export class Wiapp {
      * @returns {Promise<void>}
      */
     start = async () => {
+
         try {
+            this.api.setEndpoint(this.config.getEnvServer());
+
             if (Wiapp.hasInit()){
                 // we self authenticate and pass on the result to any delegate implementing this routine.
                 if (!this.api.isAuthorized() && this.config.authAutoAuthenticate) {
@@ -344,12 +349,13 @@ export class Wiapp {
      * @return true for success / false otherwise
      */
      startApi = async () => {
-        if (Wiapp.hasInit()){
+         this.api.setEndpoint(this.config.getEnvServer());
+         if (Wiapp.hasInit()){
             return true;
-        }
+         }
 
-        await this.initTokens();
-        await this._setLocaleAndVersionInfo();
+         await this.initTokens();
+         await this._setLocaleAndVersionInfo();
 
          // we self authenticate and pass on the result to any delegate implementing this routine.
          if (!this.api.isAuthorized() && this.config.authAutoAuthenticate) {
@@ -380,10 +386,18 @@ export class Wiapp {
         this.locType = locType;
 
         if (locPermission === "undetermined") {
-            // haven't asked yet - so heres our big chance
-            locPermission = await Permissions.request('location', {type: locType});
-            this.locPermission = locPermission;
-            this.locType = locType;
+            // haven't asked yet - so heres our big chance. Note: the request permission
+            // does not return the correct permission if we ask for always due to a bug
+            // in the code.  No matter just call check after this routine returns
+            await Permissions.request('location', {type: locType});
+            locPermission = await Permissions.check('location',{ type: locType });
+
+            // if we started with always and failed, we may have got wheninuse.
+            // NOTE: this is IOS only - with android the always/wheninuse is ignored.
+            if (locPermission === "denied" && locType === "always") {
+                locType = 'whenInUse';
+                locPermission = await Permissions.check('location',{ type: locType });
+            }
         }
         else if (locPermission === "denied") {
             // we have already been refused
@@ -393,7 +407,6 @@ export class Wiapp {
             // either not supported or been told to never ask again
         }
 
-
         if (locPermission === "authorized"){
             this.locPermission = locPermission;
             this.locType = locType;
@@ -401,7 +414,7 @@ export class Wiapp {
         else {
             // set our failed state against always as this is the base
             this.locPermission = locPermission;
-            this.locType = locType;
+            this.locType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';;
         }
 
         return {locPermission, locType};
@@ -470,7 +483,7 @@ export class Wiapp {
         const {onAuthenticate, onAuthenticateFail, onNewAccessToken} = this.listener;
 
         this.autenticating =true;
-        return this.api.call("POST", path, params, false, true).then((resp)=>{
+        return this.api.call("POST", path, params, false, true).then((resp)=> {
             if (resp.success) {
                 let data = resp.data;
                 let token_id = data.token;
@@ -480,25 +493,24 @@ export class Wiapp {
                 if (token_id || this.api.accessToken !== token_id) {
                     this.api.accessToken = token_id;
                     this.api.authType = auth_type;
+                    this.authUserName = user_name;
                     onNewAccessToken(token_id);
                     onAuthenticate(resp);
-                    if (!this.deviceToken) {
-                        // NOTE: lastloc could be null here but thats ok
-                        this.sendDeviceUpdate(this.lastLoc, false, this._ensureMonitoring);
-                    }
-                    else {
-                        this._ensureMonitoring();
-                    }
-
-                    this.authUserName = user_name;
-
-                    this.saveTokens();
+                    return this.saveTokens();
                 }
-            }
-            else {
+            } else {
                 onAuthenticateFail(resp);
-                this.clearAuth();
+                return this.clearAuth();
             }
+        }).then(()=> {
+            if (!this.deviceToken && this.isAuthorized()) {
+                // NOTE: lastloc could be null here but thats ok
+                return this.sendDeviceUpdate(this.lastLoc, false, this._ensureMonitoring);
+            }
+        }).then(()=>{
+            if (this.isAuthorized() && this.deviceToken)
+                this._ensureMonitoring();
+
             this.autenticating = false;
         }).catch((e)=>{
             if (retry === true){
@@ -545,7 +557,7 @@ export class Wiapp {
             apicall = this.api.call("PUT", `${TES_PATH_GEODEVICE}/${this.deviceToken}`, deviceInfo, true, true);
         }
 
-        apicall.then((result) => {
+        return apicall.then((result) => {
             if (result.success){
                 const device_id = result.device_id;
                 if (device_id && device_id !== this.deviceToken) {
@@ -560,15 +572,16 @@ export class Wiapp {
                 if (result.code && result.code === ERROR_NOT_FOUND) {
                     // looks like the device id has been nuked on the server. Just try again with a new device id
                     console.log("Device token invalid - Trying again with no device token");
-                    this.sendDeviceUpdate(loc, background, callback, true);
+                    return this.sendDeviceUpdate(loc, background, callback, true);
                 }
                 else {
                     onErrorHandler('Send device fail',result.msg);
                 }
             }
         }).catch((e) => {
-            if (this._checkForApiAuthFailure(e))
-                return;
+             let res = this._checkForApiAuthFailure(e);
+             if (res !== null)
+                return res; // a new promise
 
             onErrorHandler('Send device fail', e);
         });
@@ -582,14 +595,29 @@ export class Wiapp {
             manufacturer: DeviceInfo.getManufacturer(),
             model: DeviceInfo.getModel(),
             brand: (Platform.OS === "android") ? DeviceInfo.getBrand() : DeviceInfo.getDeviceId(),
-            sdk: DeviceInfo.getAPILevel(),
+            sdk: (Platform.OS === "android") ? DeviceInfo.getAPILevel(): "",
             release: DeviceInfo.getSystemVersion()+"",
             build_type:  (__DEV__)? "debug":"release",
-            location_permission: this.locPermission,
+            location_permission: (Platform.OS === "android") ? this.locPermission: this._apple_perm(),
             location_type: this.locType
         };
 
         return info;
+    };
+
+    _apple_perm = ()=>{
+        if (this.locPermission !== "authorized")
+            return this.locPermission;
+
+        if (this.locType === 'always'){
+            return "Always Allowed";
+        }
+        else if (this.locType === "whenInUse"){
+            return "When In Use Allowed";
+        }
+        else {
+            return this.locType;
+        }
     };
 
     /**
@@ -851,6 +879,8 @@ export class Wiapp {
             this.localeToken =   _nwu(jsonData.localeToken);
             this.timezoneToken = _nwu(jsonData.timezoneToken);
             this.versionToken =  _nwu(jsonData.versionToken);
+            this.lastPermissionNag = _nwu(jsonData.lastPermissionNag);
+            this.lastPermissionNagCount = _nwu(jsonData.lastPermissionNagCount);
         }).catch((e)=>{
             this.listener.onErrorHandler("init token failed", e);
         });
@@ -870,7 +900,9 @@ export class Wiapp {
             pushToken : this.pushToken,
             localeToken : this.localeToken,
             timezoneToken : this.timezoneToken,
-            versionToken : this.versionToken
+            versionToken : this.versionToken,
+            lastPermissionNag: this.lastPermissionNag,
+            lastPermissionNagCount: this.lastPermissionNagCount,
         };
         return AsyncStorage.setItem(KEY_WIAPP_SETTINGS, JSON.stringify(tokens));
     };
@@ -906,7 +938,7 @@ export class Wiapp {
      * @private
      */
     _onGeofenceUpdate = (geo) => {
-        console.log("Geo update:" + JSON.stringify(geo));
+        //console.log("Geo update:" + JSON.stringify(geo));
         const {onErrorHandler, onGeoUpdateHandler} = this.listener;
         if (!geo.success){
             onErrorHandler("Geo update failure", geo);
@@ -937,7 +969,7 @@ export class Wiapp {
      * @private
      */
     _onLocationUpdate = (loc) => {
-        console.log("Loc update:" + JSON.stringify(loc));
+        //console.log("Loc update:" + JSON.stringify(loc));
         const {onErrorHandler, onLocationUpdateHandler} = this.listener;
         if (!loc.success){
             onErrorHandler("Geo update failure", loc);
@@ -982,7 +1014,7 @@ export class Wiapp {
      * @private
      */
     _onBoot = () => {
-        console.log("System booted");
+        //console.log("System booted");
         if (this.listener.onBootHandler)
             this.listener.onBootHandler()
 

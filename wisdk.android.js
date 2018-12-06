@@ -51,10 +51,12 @@ const setup = (pr, fullStartup=false) => {
     }
     else {
         // already have a we instance with config and listener
-        const startmeup = (fullStartup) ? wi.start: wi.startApi ;
-        return startmeup().then(()=>{
-            return pr;
-        })
+        return wi.config.getSavedConfig().then(()=> {
+            const startmeup = (fullStartup) ? wi.start: wi.startApi ;
+            startmeup().then(()=>{
+                return pr;
+            })
+        });
     }
 
 };
@@ -62,51 +64,66 @@ const setup = (pr, fullStartup=false) => {
 // register the various headless tasks
 AppRegistry.registerHeadlessTask(GEO_TRANSITION_TASK_NAME, () => {
     return (geofenceEvent) => {
-        return setup(new Promise((resolve, reject) => {
-            //console.log('#### in geofence task: '+JSON.stringify(geofenceEvent));
-            try {
-                geofence_callbacks.forEach(callback => {
-                    callback(geofenceEvent);
-                });
-                resolve();
-            }
-            catch(e){
-                reject(e);
-            }
-        }));
+        try {
+            return setup(new Promise((resolve, reject) => {
+                //console.log('#### in geofence task: '+JSON.stringify(geofenceEvent));
+                try {
+                    geofence_callbacks.forEach(callback => {
+                        callback(geofenceEvent);
+                    });
+
+                    resolve();
+                } catch (e) {
+                    reject(e);
+                }
+                //console.log('#### out geofence task');
+            }));
+        }
+        catch(e){
+            console.log("Exception in geo event:"+e);
+        }
     }
 });
 
 AppRegistry.registerHeadlessTask(LOC_UPDATE_TASK_NAME, () => {
     return (locEvent) => {
-        return setup(new Promise((resolve, reject) => {
-            //console.log('#### in location task: '+JSON.stringify(locEvent));
-            try {
-                locupdate_callbacks.forEach(callback => {
-                    callback(locEvent);
-                });
-                resolve();
-            }
-            catch(e){
-                reject(e);
-            }
-        }));
+        try {
+            return setup(new Promise((resolve, reject) => {
+                //console.log('#### in location task: '+JSON.stringify(locEvent));
+                try {
+                    locupdate_callbacks.forEach(callback => {
+                        callback(locEvent);
+                    });
+                    resolve();
+                } catch (e) {
+                    reject(e);
+                }
+                //console.log('#### out location task');
+            }));
+        }
+        catch(e){
+            console.log("Exception in loc update:"+e);
+        }
     }
 });
 
 AppRegistry.registerHeadlessTask(BOOT_TASK_NAME, () => {
     return () => {
-        return setup(new Promise((resolve, reject) => {
-            try {
-                boot_callbacks.forEach(callback => {
-                    callback();
-                });
-                resolve();
-            }
-            catch(e){
-                reject(e);
-            }
-        }), true);
+        try {
+            return setup(new Promise((resolve, reject) => {
+                try {
+                    boot_callbacks.forEach(callback => {
+                        callback();
+                    });
+                    resolve();
+                } catch (e) {
+                    reject(e);
+                }
+            }), true);
+        }
+        catch(e){
+            console.log("Exception in bootL"+e);
+        }
     }
 });
 
