@@ -1084,9 +1084,8 @@ export class Wiapp {
 
 
     onNotificationOpened = (action, notification, appStarted)=>{
-        console.log('onNotificationOpened '+action+':'+notification.data+' started'+appStarted);
         if (this.listener!=null){
-            this.listener.onNotificationOpened(action, notification.data, appStarted);
+            this.listener.onNotificationOpened(action, notification, appStarted);
         }
         this.ackEvent(notification);
     };
@@ -1094,15 +1093,15 @@ export class Wiapp {
     // wither the onNoificationOpened or onNotification has already been called.
 
     onNotificationDisplayed = (notification)=>{
-        console.log(`onNotificationDisplayed ${notification.data}`);
         if (this.listener!=null){
-            this.listener.onNotificationDisplayed(notification.data);
+            this.listener.onNotificationDisplayed(notification);
         }
     };
 
     ackEvent = (notification) => {
-        const event_id = notification.data.event_id;
-        return this.updateEventAck(event_id, true);
+        const event_id = notification.data.event_id || notification.data['event-id'];
+        if (event_id)
+            return this.updateEventAck(event_id, true);
 
     };
 
