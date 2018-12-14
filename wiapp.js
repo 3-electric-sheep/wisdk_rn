@@ -44,12 +44,21 @@ const TES_PATH_LOGIN = "auth/login";
 const TES_PATH_PROFILE = "account";
 const TES_PATH_GEODEVICE = "geodevice"; // TODO: this should be plural
 
+const PERMISSION_NONE = 0;
+const PERMISSION_OK = 1;
+const PERMISSION_PARTIAL = 2;
+
 /**
  * Error codes returned by the server
  **/
 const ERROR_NOT_FOUND = 1;
 const ERROR_ADD = 2;
 const ERROR_UPDATE = 4;
+
+/**
+ * 1 day in ms
+ */
+const ONE_DAY = 1000*60*60*24;
 
 /**
  * For now just hardwire version
@@ -98,6 +107,26 @@ export class WiAppListener {
         else {
             this._doMsg(`Authenicate failed: Unknown error ${resp}`);
         }
+    };
+
+    /**
+     * Ask the user to change permission via the settings screen
+     */
+    askForPermission = (config, settings) => {
+        Alert.alert(
+            config.askForLocationPermTitle,
+            config.askForLocationPermBody,
+            [
+                {
+                    text: 'No thanks',
+                    onPress: () => console.log('Permission denied'),
+                    style: 'cancel',
+                },
+                {   text: 'Open Settings',
+                    onPress: settings
+                }
+            ],
+        )
     };
 
     /**
@@ -212,6 +241,8 @@ export class Wiapp {
         this.localeToken = null;
         this.timezoneToken = null;
         this.versionToken = null;
+
+        // control the asking for permission
         this.lastPermissionNag = null;
         this.lastPermissionNagCount = 0;
 
@@ -304,14 +335,12 @@ export class Wiapp {
             await RNWisdk.configure(this.config);
             await this.config.saveConfig();
 
-            await this.pushMgr.start();
-
             // we self authenticate and pass on the result to any delegate implementing this routine.
             if (!this.api.isAuthorized() && this.config.authAutoAuthenticate) {
                 await this.authenticate(this.config.authCredentials, true);
             }
 
-            // get the permission ofr location.  Always/When in use is dependant on config
+            // get the permission for location.  Always/When in use is dependant on config
             // requireBackgroundProcessing flag.
             const {locPermission, locType} = await this._checkAndRequestPermission();
             if (locPermission === "authorized"){
@@ -325,6 +354,8 @@ export class Wiapp {
                 this.locType = 'always';
                 this._checkForPermChange();
             }
+
+            await this.pushMgr.start();
 
             Wiapp.setInitDone();
 
@@ -377,6 +408,62 @@ export class Wiapp {
          this.pushMgr.stop();
      };
 
+    /**
+     * returns the current permission as a promise that returns object with permission and type keys
+     *
+     * @return {Promise<{permission: *, type: string}>}
+     */
+     getCurrentLocationPermission = async () => {
+         // options : 'authorized' | 'denied' | 'restricted' | 'undetermined'
+         let locType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';
+         // sort out what permission we have
+         let locPermission = await Permissions.check('location',{ type: locType });
+
+
+         // if we started with always and failed, we may have got wheninuse.
+         // NOTE: this is IOS only - with android the always/wheninuse is ignored.
+         if (locPermission === "denied" && locType === "always") {
+             locType = 'whenInUse';
+             locPermission = await Permissions.check('location', {type: locType});
+         }
+
+         if (locPermission !== "authorized"){
+            locType = "always"
+         }
+
+         return {permission:locPermission, type:locType};
+
+     };
+
+
+    /**
+     * Checks to see if we have the desired permission currently set
+     * @return {*} 0 = no, 1 = yes, 2 = partial
+     */
+    haveDesiredPermission = (perm) => {
+        if (perm.permission !==  "authorized")
+            return PERMISSION_NONE;
+
+        const deisredType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';
+        if (desiredType !== perm.type)
+            return PERMISSION_PARTIAL;
+
+        return PERMISSION_OK;
+    };
+
+
+    /**
+     * Returns the current notification permission
+     * @param types
+     * @return {Promise<*>}
+     */
+    getCurrentNotificationPermission = async (types) => {
+         if (types === undefined || types === null)
+             types = ['alert'];
+
+        return await Permissions.check('notification', { type: types});
+     };
+
     _checkAndRequestPermission = async () => {
         // options : 'authorized' | 'denied' | 'restricted' | 'undetermined'
         let locType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';
@@ -385,26 +472,34 @@ export class Wiapp {
         this.locPermission = locPermission;
         this.locType = locType;
 
-        if (locPermission === "undetermined") {
-            // haven't asked yet - so heres our big chance. Note: the request permission
-            // does not return the correct permission if we ask for always due to a bug
-            // in the code.  No matter just call check after this routine returns
-            await Permissions.request('location', {type: locType});
-            locPermission = await Permissions.check('location',{ type: locType });
 
-            // if we started with always and failed, we may have got wheninuse.
-            // NOTE: this is IOS only - with android the always/wheninuse is ignored.
-            if (locPermission === "denied" && locType === "always") {
-                locType = 'whenInUse';
-                locPermission = await Permissions.check('location',{ type: locType });
+        // if we started with always and failed, we may have got wheninuse.
+        // NOTE: this is IOS only - with android the always/wheninuse is ignored.
+        if (locPermission === "denied" && locType === "always") {
+            locType = 'whenInUse';
+            locPermission = await Permissions.check('location', {type: locType});
+        }
+
+        if (this.config.askForLocationPermission) {
+            if (locPermission === "undetermined") {
+                // haven't asked yet - so heres our big chance. Note: the request permission
+                // does not return the correct permission if we ask for always due to a bug
+                // in the code.  No matter just call check after this routine returns
+                await Permissions.request('location', {
+                    type: locType,
+                    rationale: {
+                        title: this.config.askForLocationPermTitle,
+                        message: this.config.askForLocationPermBody
+                    }
+                });
+                locPermission = await Permissions.check('location', {type: locType});
+
+            } else if (locPermission === "denied") {
+                // we have already been refused
+                this._alertForLocationPermission(locType, locPermission)
+            } else if (locPermission === "restricted") {
+                // either not supported or been told to never ask again
             }
-        }
-        else if (locPermission === "denied") {
-            // we have already been refused
-           this._alertForLocationPermission(locType,locPermission)
-        }
-        else if (locPermission === "restricted") {
-            // either not supported or been told to never ask again
         }
 
         if (locPermission === "authorized"){
@@ -422,34 +517,21 @@ export class Wiapp {
 
     _alertForLocationPermission = (locType, permission) =>
     {
-        if (!this.config.askForLocationPermission){
-            return;
-        }
-
         if (AppState.currentState !== 'active'){
             console.log("Permission denied and we are in background. Can't ask for it");
             return;
         }
 
-        const settings = (Platform.OS === 'ios')  ? Permissions.openSettings : OpenSettings.openSettings;
-
-        Alert.alert(
-            'Can we access your location ?',
-            'We need access so you we can send you great offers in your area',
-            [
-                {
-                    text: 'No thanks',
-                    onPress: () => console.log('Permission denied'),
-                    style: 'cancel',
-                },
-                {   text: 'Open Settings',
-                    onPress: settings
-                }
-            ],
-        )
+        if (this.shouldCheckPermission()) {
+            const settings = (Platform.OS === 'ios') ? Permissions.openSettings : OpenSettings.openSettings;
+            if (this.listener) {
+                this.listener.askForPermission(this.config, settings);
+                this.setLastPermissionCheck();
+            }
+        }
     };
 
-    isAuthorized = () => { return this.api.isAuthorized(); }
+    isAuthorized = () => { return this.api.isAuthorized(); };
 
     authenticate =  (params, retry) => {
 
@@ -919,6 +1001,39 @@ export class Wiapp {
     setDeviceToken = (deviceToken) => {
         this.deviceToken = deviceToken;
         this.saveTokens();
+    };
+
+    /**
+     *  Sets the time of the last permission check and the number of times we have nagged the
+     *  user about upping permission
+     */
+    setLastPermissionCheck = () => {
+        if (this.lastPermissionNag === null) {
+            this.lastPermissionNagCount = 1;
+        }
+        else {
+            this.lastPermissionNagCount += 1;
+        }
+        this.lastPermissionNag = new Date().toISOString();
+        this.saveTokens();
+    };
+
+    /**
+     * Checks the time since the last permission check.
+     */
+
+    shouldCheckPermission = () => {
+        if (this.lastPermissionNag === null)
+            return true;
+
+        let dt = new moment.moment(this.lastPermissionNag);
+        let now = new Date();
+        let diff = Math.round((now - dt) / ONE_DAY);
+        let nagPeriod = (this.lastPermissionNagCount + 1) * this.config.locationPermissionNagInterval;
+        if (diff > nagPeriod)
+            return true;
+
+        return false;
     };
 
     clearAuth = () => {

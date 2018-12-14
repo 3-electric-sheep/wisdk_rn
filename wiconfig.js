@@ -58,6 +58,9 @@ const INITIAL_TRIGGER_DWELL = 4;
 const ONE_MINUTE = 60000; // 1 minure in usec
 const NAG_INTERVAL = 60*60*24*7; // 7 days
 
+const ASK_LOCATION_PERM_TITLE = 'Can we access your location ?';
+const ASK_LOCATION_PERM_BODY = 'We need access so you we can send you great offers in your area';
+
 /** end Android constants **/
 
 // TODO: PJF add ios constants and switch accordingly
@@ -215,6 +218,9 @@ export class WiConfig  {
         this.askForLocationPermission = true;
         this.askForNotificationPermission = true;
         this.locationPermissionNagInterval = NAG_INTERVAL;
+
+        this.askForLocationPermTitle = ASK_LOCATION_PERM_TITLE;
+        this.askForLocationPermBody = ASK_LOCATION_PERM_BODY;
 
         // notifications
         this.autoDisplayNotifications = true;
