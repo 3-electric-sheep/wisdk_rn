@@ -1248,7 +1248,7 @@ export class Wiapp {
 
     updateEventEnacted = (eventId, ack) => {
         const params = {"enact": ack};
-        const path = `events/${eventId}/acknowledged`;
+        const path = `events/${eventId}/ack`;
         return this.api.callapi("PUT" , path, params, true, true);
     };
 
