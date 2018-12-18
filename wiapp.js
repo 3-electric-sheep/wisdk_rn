@@ -489,7 +489,7 @@ export class Wiapp {
         let dt =  moment(this.lastPermissionNag);
         let now =  moment();
         let diff = now.diff(dt, 'days');
-        let nagPeriod = Math.pow(this.config.locationPermissionNagInterval, (this.lastPermissionNagCount + 1));
+        let nagPeriod = Math.pow(this.config.locationPermissionNagInterval, this.lastPermissionNagCount);
         if (diff > nagPeriod)
             return true;
 
