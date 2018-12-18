@@ -12,15 +12,15 @@
 //  Agreement is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
 //  express or implied. See the License Agreement for the specific language governing permissions
 //  and limitations under the License Agreement.
+import React from "react";
 
 import {
-    AsyncStorage,
-    Platform,
-    Alert,
-    AppState
+AsyncStorage,
+Platform,
+Alert,
+AppState
 } from "react-native";
 
-import React from "react";
 
 import { Wiapi, getErrorMsg, utcnow } from './wiapi'
 import { WiConfig} from "./wiconfig";
@@ -33,6 +33,7 @@ import Permissions from 'react-native-permissions';
 import OpenSettings from 'react-native-open-settings';
 
 import uuidv4 from "uuid/v4";
+import moment from "moment";
 
 const KEY_WIAPP_SETTINGS = "@TesWI:AppSettings";
 
@@ -258,6 +259,13 @@ export class Wiapp {
 
         // are we autheticating
         this.autenticating = false;
+
+        // dummy constants
+        this.PERMISSION_NONE = PERMISSION_NONE;
+        this.PERMISSION_OK = PERMISSION_OK
+        this.PERMISSION_PARTIAL =  PERMISSION_PARTIAL;
+
+        this.initTokens();
     }
 
     /**
@@ -444,13 +452,49 @@ export class Wiapp {
         if (perm.permission !==  "authorized")
             return PERMISSION_NONE;
 
-        const deisredType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';
+        const desiredType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';
         if (desiredType !== perm.type)
             return PERMISSION_PARTIAL;
 
         return PERMISSION_OK;
     };
 
+
+    /**
+     *  Sets the time of the last permission check and the number of times we have nagged the
+     *  user about upping permission
+     */
+    setLastPermissionCheck = () => {
+        if (this.lastPermissionNag === null) {
+            this.lastPermissionNagCount = 1;
+        }
+        else {
+            this.lastPermissionNagCount += 1;
+        }
+        this.lastPermissionNag = new Date().toISOString();
+        this.saveTokens();
+    };
+
+    /**
+     * Checks the time since the last permission check.
+     */
+
+    shouldCheckPermission = () => {
+        if (this.lastPermissionNag === null)
+            return true; // time to nag :-)
+
+        if (this.lastPermissionNagCount >= this.config.locationPermissionNagMaxCount)
+            return false; // give up on this person
+
+        let dt =  moment(this.lastPermissionNag);
+        let now =  moment();
+        let diff = now.diff(dt, 'days');
+        let nagPeriod = Math.pow(this.config.locationPermissionNagInterval, (this.lastPermissionNagCount + 1));
+        if (diff > nagPeriod)
+            return true;
+
+        return false;
+    };
 
     /**
      * Returns the current notification permission
@@ -464,8 +508,9 @@ export class Wiapp {
         return await Permissions.check('notification', { type: types});
      };
 
-    _checkAndRequestPermission = async () => {
+    _checkAndRequestPermission = async (askForFullPermission) => {
         // options : 'authorized' | 'denied' | 'restricted' | 'undetermined'
+        let partial = false;
         let locType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';
         // sort out what permission we have
         let locPermission = await Permissions.check('location',{ type: locType });
@@ -478,6 +523,7 @@ export class Wiapp {
         if (locPermission === "denied" && locType === "always") {
             locType = 'whenInUse';
             locPermission = await Permissions.check('location', {type: locType});
+            partial = (locPermission === "authorized");
         }
 
         if (this.config.askForLocationPermission) {
@@ -494,7 +540,7 @@ export class Wiapp {
                 });
                 locPermission = await Permissions.check('location', {type: locType});
 
-            } else if (locPermission === "denied") {
+            } else if (locPermission === "denied" || (partial && this.config.askForFullPermission)) {
                 // we have already been refused
                 this._alertForLocationPermission(locType, locPermission)
             } else if (locPermission === "restricted") {
@@ -517,16 +563,10 @@ export class Wiapp {
 
     _alertForLocationPermission = (locType, permission) =>
     {
-        if (AppState.currentState !== 'active'){
-            console.log("Permission denied and we are in background. Can't ask for it");
-            return;
-        }
-
         if (this.shouldCheckPermission()) {
             const settings = (Platform.OS === 'ios') ? Permissions.openSettings : OpenSettings.openSettings;
             if (this.listener) {
                 this.listener.askForPermission(this.config, settings);
-                this.setLastPermissionCheck();
             }
         }
     };
@@ -761,18 +801,16 @@ export class Wiapp {
             return;
         }
 
-        this._clearCallbacks();
+        this._clearCallbacks(true);
 
         RNWisdk.removeLocationUpdates();
         RNWisdk.clearGeofences();
-
-        this.permCallback = RNWisdk.onPermissionChange(this._onPermissionChange);
 
         this.isMonitoring = false;
     };
 
     _setupCallbacks = () => {
-        this._clearCallbacks();
+        this._clearCallbacks(false);
         this.geoCallback = RNWisdk.onGeofenceUpdate(this._onGeofenceUpdate);
         this.locCallback = RNWisdk.onLocationUpade(this._onLocationUpdate);
         this.permCallback = RNWisdk.onPermissionChange(this._onPermissionChange);
@@ -787,11 +825,12 @@ export class Wiapp {
         this.permCallback = RNWisdk.onPermissionChange(this._onPermissionChange);
     };
 
-    _clearCallbacks = () => {
+    _clearCallbacks = (leavePermChg) => {
         if (this.geoCallback) { this.geoCallback(); this.geoCallback=null;}
         if (this.locCallback) {this.locCallback(); this.locCallback=null;}
         if (this.bootCallback) {this.bootCallback(); this.bootCallback=null;}
-        if (this.permCallback) {this.permCallback(); this.permCallback=null;}
+        if (!leavePermChg)
+            if (this.permCallback) {this.permCallback(); this.permCallback=null;}
     };
 
     _fillDeviceFromLocation = (loc, background) => {
@@ -1003,39 +1042,6 @@ export class Wiapp {
         this.saveTokens();
     };
 
-    /**
-     *  Sets the time of the last permission check and the number of times we have nagged the
-     *  user about upping permission
-     */
-    setLastPermissionCheck = () => {
-        if (this.lastPermissionNag === null) {
-            this.lastPermissionNagCount = 1;
-        }
-        else {
-            this.lastPermissionNagCount += 1;
-        }
-        this.lastPermissionNag = new Date().toISOString();
-        this.saveTokens();
-    };
-
-    /**
-     * Checks the time since the last permission check.
-     */
-
-    shouldCheckPermission = () => {
-        if (this.lastPermissionNag === null)
-            return true;
-
-        let dt = new moment.moment(this.lastPermissionNag);
-        let now = new Date();
-        let diff = Math.round((now - dt) / ONE_DAY);
-        let nagPeriod = (this.lastPermissionNagCount + 1) * this.config.locationPermissionNagInterval;
-        if (diff > nagPeriod)
-            return true;
-
-        return false;
-    };
-
     clearAuth = () => {
         this.api.accessToken = null;
         this.api.accessAuthType = null;
@@ -1160,7 +1166,7 @@ export class Wiapp {
 
         const locPermission = perm[status];
         const locType = (locPermission === "authorized") ? permType[status] : null;
-        this.locPermission = locPermission
+        this.locPermission = locPermission;
         this.locType = locType;
 
         if (this.locPermission === "authorized") {

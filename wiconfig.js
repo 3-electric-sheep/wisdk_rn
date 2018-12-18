@@ -56,7 +56,8 @@ const INITIAL_TRIGGER_EXIT = 2;
 const INITIAL_TRIGGER_DWELL = 4;
 
 const ONE_MINUTE = 60000; // 1 minure in usec
-const NAG_INTERVAL = 60*60*24*7; // 7 days
+const NAG_INTERVAL = 7; // 7 days
+const NAG_MAX_COUNT = 4;  // 1=now, 2=7 days, 3=49 days, 4=343day
 
 const ASK_LOCATION_PERM_TITLE = 'Can we access your location ?';
 const ASK_LOCATION_PERM_BODY = 'We need access so you we can send you great offers in your area';
@@ -216,8 +217,10 @@ export class WiConfig  {
 
         // permissions
         this.askForLocationPermission = true;
+        this.askForFullPermission = true; // if we only have partial ask for full.
         this.askForNotificationPermission = true;
         this.locationPermissionNagInterval = NAG_INTERVAL;
+        this.locationPermissionNagMaxCount = NAG_MAX_COUNT;
 
         this.askForLocationPermTitle = ASK_LOCATION_PERM_TITLE;
         this.askForLocationPermBody = ASK_LOCATION_PERM_BODY;
