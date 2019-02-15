@@ -1254,7 +1254,7 @@ export class Wiapp {
 
     updateEventEnacted = (eventId, ack) => {
         const params = {"enact": ack};
-        const path = `events/${eventId}/ack`;
+        const path = `events/${eventId}/enact`;
         return this.api.callapi("PUT" , path, params, true, true);
     };
 
@@ -1270,7 +1270,7 @@ export class Wiapp {
      **/
 
     listSearchEvents = (params, latitude, longitude) => {
-        return this.api.call("GET", `geopos/${longitude},${latitude}/live-events`, params, true, true);
+        return this.api.callapi("GET", `geopos/${longitude},${latitude}/live-events`, params, true, true);
     };
 
     /**
@@ -1280,7 +1280,7 @@ export class Wiapp {
      **/
 
     listAcknowledgedLiveEvents = (params) => {
-        return this.api.call("GET", "events/acknowledged", params, true, true);
+        return this.api.callapi("GET", "events/acknowledged", params, true, true);
     };
 
     /**
@@ -1289,7 +1289,7 @@ export class Wiapp {
      @param params Parameters to the list live events call
      **/
     listFollowedLiveEvents = (params) => {
-        return this.api.call("GET", "events/following", params, true, true);
+        return this.api.callapi("GET", "events/following", params, true, true);
     };
 
     /**
@@ -1300,7 +1300,7 @@ export class Wiapp {
     listAlertedEvents= (params) => {
         const devToken = this.deviceToken;
         const path = `/geodevice/${devToken}/alerted-events`;
-        return this.api.call("GET", path , params, true, true);
+        return this.api.callapi("GET", path , params, true, true);
     };
 
 

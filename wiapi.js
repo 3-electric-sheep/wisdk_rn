@@ -77,9 +77,19 @@ export class Wiapi {
             wrap = true;
 
         if (body != null) {
-            params.body = JSON.stringify(body);
-            params.headers  =  {
-                "Content-type": "application/json"
+            if (method.toUpperCase() !== "POST" && method.toUpperCase() !== "PUT") {
+                let queryString = Object.keys(body).map(key => key + '=' + body[key]).join('&');
+                if (url.indexOf('?')>=0) {
+                    url += "&" + queryString;
+                }
+                else {
+                    url += "?" + queryString;
+                }
+            } else {
+                params.body = JSON.stringify(body);
+                params.headers = {
+                    "Content-type": "application/json"
+                }
             }
         }
         if (this.headers != null){
