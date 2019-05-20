@@ -36,14 +36,23 @@ export const utcnow = () => {
     return now.toISOString();
 };
 
+export class WiApiAuthListener {
+    /**
+     sent what an authorization has failed
+     */
+    httpAuthFailure = (response) => {
+
+    };
+}
+
 export class Wiapi {
-    constructor(endpoint){
+    constructor(endpoint, authListener){
         this.endpoint = endpoint;
         this.headers = null;
         this.accessToken = null;
         this.authType = null;
         this.accessSystemDefaults = null;
-
+        this.authListener = (authListener !== undefined) ? authListener: null;
     }
 
     getEndpoint = () => {
@@ -123,8 +132,16 @@ export class Wiapi {
             else {
                 throw this.wrapApiException(`${(response.statusText)?response.statusText:"HTTP Error"} (${response.status})`, null,  response);
             }
+        }).catch((response) => {
+            if (this.authListener
+                && this.authListener.httpAuthFailure
+                && response && (response.status === 401 || response.status === 403)) {
+                return this.authListener.httpAuthFailure(response);
+            }
+            throw response;
         });
     };
+
 
     /**
      * Like normal api call but returns a promise and deals with soft error

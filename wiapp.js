@@ -22,7 +22,7 @@ AppState
 } from "react-native";
 
 
-import { Wiapi, getErrorMsg, utcnow } from './wiapi'
+import { Wiapi, getErrorMsg, utcnow, WiApiAuthListener } from './wiapi'
 import { WiConfig} from "./wiconfig";
 import { WiPushMgr} from "./wipushmgr";
 
@@ -213,6 +213,19 @@ export class WiAppListener {
 
 };
 
+export const WiAppAuthListener = class extends WiApiAuthListener {
+
+    constructor(app){
+        super();
+        this.app = app;
+    }
+    /**
+     sent what an authorization has failed
+     */
+    httpAuthFailure = (response) => {
+        return this.app.httpAuthListener(response);
+    };
+};
 
 export class Wiapp {
     static wiInstance = null;
@@ -224,7 +237,7 @@ export class Wiapp {
             listener = new WiAppListener();
 
         this.config = config;
-        this.api = new Wiapi(config.getEnvServer());
+        this.api = new Wiapi(config.getEnvServer(), new WiAppAuthListener(this));
         this.listener = listener;
 
         this.pushMgr = new WiPushMgr(this.config, this);
@@ -262,7 +275,7 @@ export class Wiapp {
 
         // dummy constants
         this.PERMISSION_NONE = PERMISSION_NONE;
-        this.PERMISSION_OK = PERMISSION_OK
+        this.PERMISSION_OK = PERMISSION_OK;
         this.PERMISSION_PARTIAL =  PERMISSION_PARTIAL;
 
         this.initTokens();
@@ -645,6 +658,18 @@ export class Wiapp {
             this.clearAuth();
             this.autenticating = false;
         })
+    };
+
+    httpAuthListener = (resp) => {
+        console.log("Auth failure encountered: "+resp);
+
+        if (this.api.isAuthorized())
+            this.api.clearAuth();
+
+        // we self authenticate and pass on the result to any delegate implementing this routine.
+        if (!this.api.isAuthorized() && this.config.authAutoAuthenticate) {
+            return this.authenticate(this.config.authCredentials, false);
+        }
     };
 
     _checkForApiAuthFailure = (e) => {

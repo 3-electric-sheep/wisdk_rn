@@ -98,8 +98,15 @@ export class WiPushMgr {
 
     displayNotification = (notification)=>{
         if (Platform.OS === "android") {
-            notification.android.setChannelId(WI_NOTIFICATION_CHANNEL)
-                        .android.setSmallIcon('ic_launcher');
+            if (notification.data.media_thumbnail_url) {
+                notification.android.setChannelId(WI_NOTIFICATION_CHANNEL)
+                    .android.setSmallIcon('ic_launcher')
+                    .android.setBigPicture(notification.data.media_thumbnail_url);
+            }
+            else {
+                notification.android.setChannelId(WI_NOTIFICATION_CHANNEL)
+                    .android.setSmallIcon('ic_launcher');
+            }
         }
 
         firebase.notifications().displayNotification(notification);
