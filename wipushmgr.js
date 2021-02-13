@@ -13,7 +13,12 @@
 //  express or implied. See the License Agreement for the specific language governing permissions
 //  and limitations under the License Agreement.
 
-import firebase from 'react-native-firebase';
+import firebase from '@react-native-firebase/app';
+import "@react-native-firebase/analytics";
+import "@react-native-firebase/app";
+import "@react-native-firebase/crashlytics";
+import "@react-native-firebase/messaging";
+
 import {Alert, Platform} from "react-native";
 
 import Permissions from 'react-native-permissions';
@@ -53,25 +58,34 @@ export class WiPushMgr {
         this.deviceToken = null;
         this.listener = listener;
         this.onTokenRefreshListener = null;
-        this.notificationDisplayedListener = null;
-        this.notificationListener = null;
-        this.notificationOpenedListener = null;
+
+        this.onForegroundMessageListener = null;
+        this.onBackgroundMessageListener = null;
     };
 
     start(){
         return this._checkPermissions().then(()=>{
             this.onTokenRefreshListener = firebase.messaging().onTokenRefresh(this._setupToken);
-            this.notificationDisplayedListener = firebase.notifications().onNotificationDisplayed((notification) =>{this._onNotificationDisplayed(notification)});
-            this.notificationListener = firebase.notifications().onNotification((notification) =>{this._onNotification(notification)});
 
-            this.notificationOpenedListener = firebase.notifications().onNotificationOpened((notificationOpen) => {this._onNotificationOpened(notificationOpen, false)});
+            this.onForegroundMessageListener = firebase.messaging().onMessage(async remoteMessage => {
+                console.log('message arrived in foreground!', JSON.stringify(remoteMessage));
+                this._onNotification(remoteMessage)
+            });
 
-            if (Platform.OS === 'android') {
-                const channel = new firebase.notifications.Android.Channel(WI_NOTIFICATION_CHANNEL, WI_NOTIFICATION_CHANNEL_NAME, firebase.notifications.Android.Importance.Max)
-                    .setDescription(WI_NOTIFICATION_CHANNEL_NAME);
-                firebase.notifications().android.createChannel(channel);
-            }
+            this.onBackgroundMessageListener = firebase.messaging().setBackgroundMessageHandler(async remoteMessage => {
+                console.log('Message handled in the background!', JSON.stringify(remoteMessage));
+                this._onNotificationOpened(notificationOpen, false)
+                if (remoteMessage.notification && remoteMessage.contentAvailable){
+                    this._onNotificationDisplayed(remoteMessage)
+                }
 
+            });
+
+            //if (Platform.OS === 'android') {
+            //    const channel = new firebase.notifications.Android.Channel(WI_NOTIFICATION_CHANNEL, WI_NOTIFICATION_CHANNEL_NAME, firebase.notifications.Android.Importance.Max)
+            //        .setDescription(WI_NOTIFICATION_CHANNEL_NAME);
+            //    firebase.notifications().android.createChannel(channel);
+            //}
 
             return firebase.messaging().getToken()
                 .then(fcmToken => {
@@ -82,34 +96,59 @@ export class WiPushMgr {
 
     stop() {
         if (this.onTokenRefreshListener) this.onTokenRefreshListener();
-        if (this.notificationDisplayedListener) this.notificationDisplayedListener();
-        if (this.notificationListener) this.notificationListener();
-        if (this.notificationOpenedListener) this.notificationOpenedListener();
+
+        if (this.onForegroundMessageListener) this.onForegroundMessageListener();
+        if (this.onBackgroundMessageListener) this.onBackgroundMessageListener();
     }
 
-    checkForNotification() {
-        return firebase.notifications().getInitialNotification()
-            .then((notificationOpen) => {
-                if (notificationOpen) {
-                    this._onNotificationOpened(notificationOpen, true);
-                }
-            });
+    async checkForNotification() {
+        // Assume a message-notification contains a "type" property in the data payload of the screen to open
+
+        // setup listener for background opener
+        firebase.messaging().onNotificationOpenedApp(remoteMessage => {
+            console.log(
+                'Notification caused app to open from background state:',
+                JSON.stringify(remoteMessage)
+            );
+            //
+        });
+
+        // Check whether an initial notification is available
+        return firebase.messaging().getInitialNotification().then(remoteMessage => {
+            if (remoteMessage) {
+                console.log(
+                    'Notification caused app to open from quit state:',
+                    JSON.stringify(remoteMessage),
+                );
+                this._onNotificationOpened(remoteMessage, true);
+
+            }
+        });
     }
 
     displayNotification = (notification)=>{
-        if (Platform.OS === "android") {
-            if (notification.data.media_thumbnail_url) {
-                notification.android.setChannelId(WI_NOTIFICATION_CHANNEL)
-                    .android.setSmallIcon('ic_launcher')
-                    .android.setBigPicture(notification.data.media_thumbnail_url);
-            }
-            else {
-                notification.android.setChannelId(WI_NOTIFICATION_CHANNEL)
-                    .android.setSmallIcon('ic_launcher');
-            }
-        }
-
-        firebase.notifications().displayNotification(notification);
+        //if (Platform.OS === "android") {
+        //    if (notification.data.media_thumbnail_url) {
+        //        notification.android.setChannelId(WI_NOTIFICATION_CHANNEL)
+        //            .android.setSmallIcon('ic_launcher')
+        //            .android.setBigPicture(notification.data.media_thumbnail_url);
+        //    }
+        //    else {
+        //        notification.android.setChannelId(WI_NOTIFICATION_CHANNEL)
+        //            .android.setSmallIcon('ic_launcher');
+        //    }
+        //}
+        //
+        //firebase.notifications().displayNotification(notification);
+        Alert.alert(
+            notification.title,
+            notification.body,
+            [
+                {   text: 'OK',
+                    onPress: () => {}
+                }
+            ],
+        )
     };
 
     _setupToken = (fcmToken)=>{

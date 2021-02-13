@@ -12,15 +12,21 @@
   "author": "Phillip Frantz",
   "license": "",
   "peerDependencies": {
-    "react": ">= 16.5.0",
-    "react-native": ">= 0.57.0"
+    "react": ">= 16.13.1",
+    "react-native": ">= 0.63.4"
   },
   "dependencies": {
+    "@react-native-community/async-storage": "^1.12.1",
+    "@react-native-firebase/analytics": "^10.7.0",
+    "@react-native-firebase/app": "^10.7.0",
+    "@react-native-firebase/crashlytics": "^10.7.0",
+    "@react-native-firebase/messaging": "^10.7.0",
     "moment": "^2.23.0",
     "react-native-device-info": "^0.24.3",
-    "react-native-firebase": "^5.1.0",
     "react-native-open-settings": "^1.0.1",
-    "react-native-permissions": "^1.1.1",
+    "react-native-permissions": "^3.0.0",
     "uuid": "^3.2.1"
   }
 }
+
+

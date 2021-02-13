@@ -15,11 +15,12 @@
 import React from "react";
 
 import {
-AsyncStorage,
 Platform,
 Alert,
 AppState
 } from "react-native";
+
+import AsyncStorage from "@react-native-community/async-storage"
 
 
 import { Wiapi, getErrorMsg, utcnow, WiApiAuthListener } from './wiapi'
@@ -29,7 +30,7 @@ import { WiPushMgr} from "./wipushmgr";
 import DeviceInfo from 'react-native-device-info';
 
 import RNWisdk from "./wisdk";
-import Permissions from 'react-native-permissions';
+import Permissions, {PERMISSIONS, RESULTS} from 'react-native-permissions';
 import OpenSettings from 'react-native-open-settings';
 
 import uuidv4 from "uuid/v4";
@@ -363,7 +364,9 @@ export class Wiapp {
 
             // get the permission for location.  Always/When in use is dependant on config
             // requireBackgroundProcessing flag.
+            console.log("Before: xxx");
             const {locPermission, locType} = await this._checkAndRequestPermission();
+            consle.log("After: uyy");
             if (locPermission === "authorized"){
                 this.locPermission = locPermission;
                 this.locType = locType;
@@ -434,25 +437,49 @@ export class Wiapp {
      *
      * @return {Promise<{permission: *, type: string}>}
      */
+
+     getLocationPermName = (locType) => {
+         if (Platform.OS === 'ios'){
+             locType = (this.config.requireBackgroundLocation) ? [PERMISSIONS.IOS.LOCATION_ALWAYS] : [PERMISSIONS.IOS.LOCATION_WHEN_IN_USE];
+         }
+         else if (Platform.OS === 'android'){
+             locType = (this.config.requireBackgroundLocation) ? [PERMISSIONS.ANDROID.ACCESS_BACKGROUND_LOCATION, PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION] : [PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION];
+         }
+         return locType
+     }
+
+    _checkPermRes = (status) => {
+        let res = RESULTS.UNAVAILABLE;
+        for (var stat in status){
+            res = status[stat];
+            if (res !== RESULTS.GRANTED)
+                break;
+        }
+        return res;
+    }
+
      getCurrentLocationPermission = async () => {
          // options : 'authorized' | 'denied' | 'restricted' | 'undetermined'
          let locType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';
-         // sort out what permission we have
-         let locPermission = await Permissions.check('location',{ type: locType });
+         const perm = this.getLocationPermName(locType);
 
+
+         // sort out what permission we have
+         let locPermission = await Permissions.checkMultiple(perm);
 
          // if we started with always and failed, we may have got wheninuse.
          // NOTE: this is IOS only - with android the always/wheninuse is ignored.
-         if (locPermission === "denied" && locType === "always") {
-             locType = 'whenInUse';
-             locPermission = await Permissions.check('location', {type: locType});
+         if (this._checkPermRes(locPermission) !== RESULTS.GRANTED && this.config.requireBackgroundLocation) {
+             locType = 'whenInUse'
+             const perm = this.getLocationPermName(locType);
+             locPermission = await Permissions.checkMultiple(perm);
          }
 
-         if (locPermission !== "authorized"){
+         if (this._checkPermRes(locPermission) !== RESULTS.GRANTED){
             locType = "always"
          }
 
-         return {permission:locPermission, type:locType};
+         return {locType};
 
      };
 
@@ -462,7 +489,7 @@ export class Wiapp {
      * @return {*} 0 = no, 1 = yes, 2 = partial
      */
     haveDesiredPermission = (perm) => {
-        if (perm.permission !==  "authorized")
+        if (perm.permission !==  RESULTS.GRANTED)
             return PERMISSION_NONE;
 
         const desiredType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';
@@ -525,53 +552,54 @@ export class Wiapp {
         // options : 'authorized' | 'denied' | 'restricted' | 'undetermined'
         let partial = false;
         let locType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';
+        let perm = this.getLocationPermName(locType);
+
         // sort out what permission we have
-        let locPermission = await Permissions.check('location',{ type: locType });
+        let locPermission = await Permissions.checkMultiple(perm);
         this.locPermission = locPermission;
         this.locType = locType;
 
-
         // if we started with always and failed, we may have got wheninuse.
         // NOTE: this is IOS only - with android the always/wheninuse is ignored.
-        if (locPermission === "denied" && locType === "always") {
-            locType = 'whenInUse';
-            locPermission = await Permissions.check('location', {type: locType});
-            partial = (locPermission === "authorized");
+        if (this._checkPermRes(locPermission) === RESULTS.DENIED && this.config.requireBackgroundLocation) {
+            locType ='whenInUse';
+            perm =  this.getLocationPermName(locType);
+            locPermission = await Permissions.checkMultiple(perm);
+            partial = (this._checkPermRes(locPermission) === RESULTS.GRANTED);
         }
 
         if (this.config.askForLocationPermission) {
-            if (locPermission === "undetermined") {
+            if (this._checkPermRes(locPermission) !== RESULTS.BLOCKED) {
                 // haven't asked yet - so heres our big chance. Note: the request permission
                 // does not return the correct permission if we ask for always due to a bug
                 // in the code.  No matter just call check after this routine returns
-                await Permissions.request('location', {
-                    type: locType,
-                    rationale: {
+                await Permissions.request(perm,
+                    {
                         title: this.config.askForLocationPermTitle,
                         message: this.config.askForLocationPermBody
                     }
-                });
-                locPermission = await Permissions.check('location', {type: locType});
+                );
+                locPermission = await Permissions.checkMultiple(perm);
 
-            } else if (locPermission === "denied" || (partial && this.config.askForFullPermission)) {
+            } else if (this._checkPermRes(locPermission) === RESULT.DENIED || (partial && this.config.askForFullPermission)) {
                 // we have already been refused
                 this._alertForLocationPermission(locType, locPermission)
-            } else if (locPermission === "restricted") {
+            } else if (this._checkPermRes(locPermission )=== RESULTS.LIMITED) {
                 // either not supported or been told to never ask again
             }
         }
 
-        if (locPermission === "authorized"){
-            this.locPermission = locPermission;
+        if (this._checkPermRes(locPermission) === RESULTS.GRANTED){
+            this.locPermission = this._checkPermRes(locPermission);
             this.locType = locType;
         }
         else {
             // set our failed state against always as this is the base
-            this.locPermission = locPermission;
-            this.locType = (this.config.requireBackgroundLocation) ? 'always' : 'whenInUse';;
+            this.locPermission = this._checkPermRes(locPermission);
+            this.locType = locType;
         }
 
-        return {locPermission, locType};
+        return {locPermission: this._checkPermRes(locPermission), locType};
     };
 
     _alertForLocationPermission = (locType, permission) =>
